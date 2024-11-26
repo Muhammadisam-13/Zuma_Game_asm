@@ -906,15 +906,15 @@ checkForKeyPress ENDP
 RUN_ZUMA PROC
     lea eax, menuMusic
     call playMenuMusic
-	call initializeScreen
-	call DrawPlayer
+    call initializeScreen
+    call DrawPlayer
     call DrawBallChain
     lea eax,gameMusic
     call playGameMusic
-	gameLoop:      
-		call checkIfBulletFired
+    gameLoop:      
+        call checkIfBulletFired
         call updateBallChain
-		jmp GameLoop	
+	jmp GameLoop	
     ExitGame:
     ret
 RUN_ZUMA ENDP
