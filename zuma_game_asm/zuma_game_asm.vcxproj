@@ -21,7 +21,6 @@
   <ItemGroup>
     <MASM Include="main.asm" />
     <MASM Include="main2.asm" />
-    <MASM Include="test.asm" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

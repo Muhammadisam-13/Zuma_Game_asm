@@ -1,3 +1,4 @@
+comment %
 INCLUDE irvine32.inc
 INCLUDE macros.inc
 INCLUDELIB winmm.lib
@@ -24,7 +25,6 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 		sprite db ?
 		xPos db ?
 		yPos db ?
-		Bullet Ball <>
 	Player ends
     playerName db 20 dup(?)
 				
@@ -44,9 +44,10 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 	; Game Objects
 	player1 Player <>
     BallChain Ball 100 dup(<'O',?,?,1,?>)
-    ballCount = 80
+    bullet Ball <'O',?,?,0,?>
 
 	; Extra variables		
+    ballCount = 80
     gameEnd db 0
     xPos db 56      ; Column (X)
     yPos db 15      ; Row (Y)
@@ -60,7 +61,7 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 	temp db ?
 	temp1 dd ?
 	space db ' '					
-	border BYTE "========================================================================================================================",0
+	border BYTE "=====================================================================================",0
 	border1 BYTE "|",0ah,0
 	border2 BYTE "|",0  
 
@@ -159,7 +160,16 @@ INSTRUCTIONS    DB '                                    ._ _ _ ___ ___ ___ _ _ _
                                db 0
 
 
-; --------------------------------------------------------------------------------------------------------------				
+    PAUSE_SCREEN db "                                       ____   _   _   _ ____  _____ ____  ", 0Dh, 0Ah
+             db "                                       |  _ \ / \ | | | / ___|| ____|  _ \ ", 0Dh, 0Ah
+             db "                                       | |_) / _ \| | | \___ \|  _| | | | |", 0Dh, 0Ah
+             db "                                       |  __/ ___ \ |_| |___) | |___| |_| |", 0Dh, 0Ah
+             db "                                       |_| /_/   \_\___/|____/|_____|____/ ", 0Dh, 0Ah, 0
+
+
+
+; --------------------------------------------------------------------------------------------------------------		
+
 .code
 playMenuMusic PROC
     push eax            
@@ -179,20 +189,20 @@ playGameMusic PROC
     ret                 
 playGameMusic ENDP
 
-stopMenuMusic PROC
+stopMusic PROC
     ; Stops any currently playing sound
     push 0                                    ; pszSound: Null
     push 0                                    ; hmod: No specific module
     push SND_PURGE                            ; fdwSound: Purge
     call PlaySound                            ; Call PlaySound
     ret
-stopMenuMusic ENDP
+stopMusic ENDP
 
 DrawPlayer PROC
 	mov player1.ypos,13
 	mov player1.xpos,55
     mov bl,current_char
-    mov player1.sprite,bl
+    mov player1.sprite,'@'
 	mov dh,player1.ypos
 	mov dl,player1.xpos
 	call gotoxy
@@ -205,8 +215,10 @@ DrawPlayer PROC
 	ret
 DrawPlayer ENDP
 
-instructionsMenu PROC
+instructionsMenu PROC USES eax edx
     call ClrScr
+    mov eax,yellow
+    call setTextColor
     mov edx,OFFSET INSTRUCTIONS_SCREEN
     call writeString
     call crlf
@@ -232,6 +244,247 @@ inputPlayerName PROC
 
     ret
 inputPlayerName ENDP
+
+EnablePauseScreen PROC
+    call ClrScr
+    mov eax,green
+    call setTextColor
+    mov dh,10
+    mov dl,0
+    call gotoxy
+    mov edx,OFFSET PAUSE_SCREEN
+    call writeString
+    call crlf
+
+    DetectKeyPress:
+    mov eax,50
+    call Delay
+    call ReadKey
+    cmp dl,VK_ESCAPE
+    je ExitingPauseScreen
+    jmp DetectKeyPress
+
+    ExitingPauseScreen:
+    call ClrScr
+    call initializeGameScreen
+    call drawPlayer
+    ret
+EnablePauseScreen ENDP
+
+HandleInput PROC
+    DetectKeyPress:     ; Check if pause key pressed
+    mov eax,50
+    call Delay
+    call ReadKey
+    cmp dl,'P'
+    je PauseInputDetected
+
+    call CheckIfBulletFired     ; Check if bullet fired
+    jmp ExitFunc
+
+PauseInputDetected:
+    call EnablePauseScreen
+    jmp ExitFunc
+    
+ExitFunc:
+    ret
+HandleInput ENDP
+
+CheckIfBulletFired PROC 
+    ; check direction changes
+    cmp dl, 'W'   ; Up
+    je SetDirectionUp
+    cmp dl, 'X'   ; Down
+    je SetDirectionDown
+    cmp dl, 'A'   ; Left
+    je SetDirectionLeft
+    cmp dl, 'D'   ; Right
+    je SetDirectionRight
+    cmp dl, 'Q'   ; Up-left
+    je SetDirectionUpLeft
+    cmp dl, 'E'   ; Up-right
+    je SetDirectionUpRight
+    cmp dl, 'Z'   ; Down-left
+    je SetDirectionDownLeft
+    cmp dl, 'C'   ; Down-right
+    je SetDirectionDownRight
+    jmp CheckIfSpacePressed
+
+    SetDirectionUp:
+    mov direction, 'w'
+    jmp CheckIfSpacePressed
+    
+    SetDirectionDown:
+    mov direction, 'x'
+    jmp CheckIfSpacePressed
+
+    SetDirectionLeft:
+    mov direction, 'a'
+    jmp CheckIfSpacePressed
+
+    SetDirectionRight:
+    mov direction, 'd'
+    jmp CheckIfSpacePressed
+
+    SetDirectionUpLeft:
+    mov direction, 'q'
+    jmp CheckIfSpacePressed
+
+    SetDirectionUpRight:
+    mov direction, 'e'
+    jmp CheckIfSpacePressed
+
+    SetDirectionDownLeft:
+    mov direction, 'z'
+    jmp CheckIfSpacePressed
+
+    SetDirectionDownRight:
+    mov direction, 'c'
+    jmp CheckIfSpacePressed
+    
+    mov al,1
+    cmp al,bullet.exists
+    je ExitFunc
+
+CheckIfSpacePressed:
+    cmp dl,' '
+    je fireTheBullet
+    jmp ExitFunc
+
+fireTheBullet:
+    call fire
+    jmp ExitFunc
+
+ExitFunc:
+    ret
+CheckIfBulletFired ENDP
+
+fire PROC
+    mov al, direction
+    mov bl, player1.xPos
+    mov bullet.xPos, bl
+    inc bullet.xPos
+    mov bl, player1.yPos
+    mov bullet.yPos, bl
+    inc bullet.yPos
+
+    cmp al, "w"
+    je fire_up
+
+    cmp al, "x"
+    je fire_down
+
+    cmp al, "a"
+    je fire_left
+
+    cmp al, "d"
+    je fire_right
+
+    cmp al, "q"
+    je fire_upleft
+
+    cmp al, "e"
+    je fire_upright
+
+    cmp al, "z"
+    je fire_downleft
+
+    cmp al, "c"
+    je fire_downright
+
+    jmp exitFunc
+
+fire_up:  
+    mov xDir, 0
+    mov yDir, -1
+    jmp moveTheBullet
+fire_down:   
+    mov xDir, 0
+    mov yDir, 1
+    jmp moveTheBullet
+
+fire_left:   
+    mov xDir, -1
+    mov yDir, 0
+    jmp moveTheBullet
+
+fire_right:
+    mov xDir, 1
+    mov yDir, 0
+    jmp moveTheBullet
+
+fire_upleft:    
+    mov xDir, -1
+    mov yDir, -1
+    jmp moveTheBullet
+
+fire_upright:
+    mov xDir, 1
+    mov yDir, -1
+    jmp moveTheBullet
+
+fire_downleft:
+    mov xDir, -1
+    mov yDir, 1
+    jmp moveTheBullet
+
+fire_downright:
+    mov xDir, 1
+    mov yDir, 1
+    
+moveTheBullet:
+    mov bullet.exists,1     ; set bullet exists to true
+    ret
+exitFunc:
+    ret
+fire ENDP
+
+moveBullet PROC
+    cmp bullet.exists,0
+    je exitFunc     ; dont move bullet if it doesnt exist
+    
+    mov dl,bullet.xPos
+    mov dh,bullet.yPos
+    call gotoxy
+    mov al,' '
+    call writeChar
+    add dl,xDir
+    add dl,xDir
+    add dh,yDir
+    add dh,yDir
+    mov bullet.xPos,dl
+    mov bullet.yPos,dh
+
+    call gotoxy
+    mov al,bullet.sprite
+    call writeChar
+        
+    cmp dl, 20                ; Left boundary
+    jle EndBullet
+    cmp dl, 96                ; Right boundary
+    jge EndBullet
+    cmp dh, 5                 ; Top boundary
+    jle EndBullet
+    cmp dh, 27                ; Bottom boundary
+    jge EndBullet
+
+    ret
+
+EndBullet:
+    mov bullet.exists, 0        ; If reached out of bounds make bullet exists false
+    mov dl, bullet.xPos
+    mov dh, bullet.yPos
+    call GoToXY
+    mWrite " "                 ; Erase bullet from screen
+    mov dx, 0
+    ret
+    
+    exitFunc:
+
+    
+    ret
+moveBullet ENDP
+
 DetectKeyInput PROC
 
     mwrite "Press 'S' to start"
@@ -273,7 +526,7 @@ displayButtons PROC
 	mov dh,1
 	call gotoxy
 	mov edx,OFFSET zuma_art  
-	mov eax,yellow
+	mov eax,lightgreen
 	call setTextColor
 	call writeString
 	call crlf
@@ -283,7 +536,7 @@ displayButtons PROC
 	mov dh,10
 	call gotoxy
     mov edx,OFFSET start   
-	mov eax,yellow
+	mov eax,lightblue
 	call setTextColor
 	call writeString
 	call crlf
@@ -303,32 +556,22 @@ displayButtons PROC
 	mov dh,20
 	call gotoxy
     mov edx,OFFSET exited   
-	mov eax,yellow
+	mov eax,red
 	call setTextColor
 	call writeString
 	call crlf
-
+    mov eax,brown
+	call setTextColor
     ret
 displayButtons ENDP
 
-initializeScreen PROC
-    call displayButtons
-
-CheckKeyInputs:
-    call DetectKeyInput
-    cmp bl,2
-    jne CheckKeyInputs
-	call Clrscr ; clear the screen
-    
-
-    call inputPlayerName
-    call ClrScr
-
+initializeGameScreen PROC
 ; Displaying score and title
+LOCAL tmp1:BYTE
 	mov dl,0
 	mov dh,5
 
-	mov eax,lightblue (black * 16)
+	mov eax,lightgreen (black * 16)
     call SetTextColor
 	mwrite "SCORE: "
 	
@@ -338,14 +581,14 @@ CheckKeyInputs:
 	call writeInt
 	mov eax,temp1
 
-	mov eax,yellow (black * 16)
+	mov eax,white (black * 16)
     call SetTextColor
-    mov dl,0
+    mov dl,15
     mov dh,29
     call Gotoxy
     mov edx,OFFSET border
     call WriteString
-    mov dl,0
+    mov dl,15
     mov dh,1
     call Gotoxy
     mov edx,OFFSET border
@@ -353,11 +596,14 @@ CheckKeyInputs:
 
     mov ecx,27
     mov dh,2
+    mov tmp1,dh
     initializeBorder1:
-		mov dl,0
+        mov dh,tmp1
+		mov dl,15
 		call Gotoxy
 		mov edx,OFFSET border1
 		call WriteString
+        inc tmp1
 		LOOP initializeBorder1
 
     mov ecx,27
@@ -366,14 +612,29 @@ CheckKeyInputs:
 
     initializeBorder2:
 		mov dh,temp
-		mov dl,119
+		mov dl,99
 		call Gotoxy
 		mov edx,OFFSET border2
 		call WriteString
 		inc temp
 		LOOP initializeBorder2
+   ret
+initializeGameScreen ENDP
+
+initializeGame PROC
+    call displayButtons
+
+CheckKeyInputs:
+    call DetectKeyInput
+    cmp bl,2
+    jne CheckKeyInputs
+	call Clrscr 
+    
+    call inputPlayerName
+    call ClrScr
+    call initializeGameScreen
 	ret
-initializeScreen ENDP
+initializeGame ENDP
 
 DrawBallChain PROC USES eax ecx edx
     LOCAL currentColor:dword
@@ -412,7 +673,6 @@ DrawBallChain PROC USES eax ecx edx
         cmp ecx,ballCount
         jne emitterLoop
         mov dl, emitter_col
-
         ret
 	ret
 DrawBallChain ENDP
@@ -543,8 +803,7 @@ UpdateBallChain PROC
         mov ballChainDirection,al
         jmp ENDUPDATE
         
-
-    
+   
     MOVINGDOWN:
         mov dl,ballChain[esi].xPos
         mov dh,ballChain[esi].yPos
@@ -598,323 +857,30 @@ UpdateBallChain PROC
     LoopSpiral:
     mov al,1
     mov ballChainDirection,al
-    inc leftBoundary
-    dec rightBoundary
-    inc upperBoundary
-    dec lowerBoundary
+    add leftBoundary,2
+    sub rightBoundary,2
+    add upperBoundary,2
+    sub lowerBoundary,2
 
     ENDUPDATE:
 
 	ret
 UpdateBallChain ENDP
 
-CheckIfBulletFired PROC
-    CheckKey1:
-    mov eax,50
-    call Delay
-    call ReadKey
-
-    cmp dl,'W'
-    je wcondition
-    jmp CheckKey2
-
-    cmp dl,'Q'
-    je qcondition
-    jmp CheckKey2
-
-    cmp dl,'E'
-    je econdition
-    jmp CheckKey2
-
-    cmp dl,'A'
-    je acondition
-    jmp CheckKey2
-
-    cmp dl,'D'
-    je dcondition
-    jmp CheckKey2
-
-    cmp dl,'X'
-    je wcondition
-    jmp CheckKey2
-
-    cmp dl,'Z'
-    je zcondition
-    jmp CheckKey2
-
-    wcondition:
-    mov al,'w'
-    mov direction,al
-    jmp CheckKey2
-
-    qcondition:
-    mov al,'q'
-    mov direction,al
-    jmp CheckKey2
-
-    econdition:
-    mov al,'e'
-    mov direction,al
-    jmp CheckKey2
-
-    acondition:
-    mov al,'a'
-    mov direction,al
-    jmp CheckKey2
-
-    dcondition:
-    mov al,'d'
-    mov direction,al
-    jmp CheckKey2
-
-    xcondition:
-    mov al,'x'
-    mov direction,al
-    jmp CheckKey2
-
-    zcondition:
-    mov al,'z'
-    mov direction,al
-    jmp CheckKey2
-
-	CheckKey2:
-    mov eax,50
-    call Delay 
-
-    call ReadKey  
-
-    cmp dl,' '
-    jne NotFired
-	call fire
-	NotFired:
-	
-	ret
-CheckIfBulletFired ENDP
-
-fire PROC
-    ; Fire a projectile from the player's current face direction
-
-    mov dl, player1.xPos      ; Fire column starts at the player's X position
-    mov dh, player1.yPos      ; Fire row starts at the player's Y position
-
-    mov fire_col, dl  ; Save the fire column position
-    mov fire_row, dh  ; Save the fire row position
-
-    mov al, direction
-    cmp al, "w"
-    je fire_up
-
-    cmp al, "x"
-    je fire_down
-
-    cmp al, "a"
-    je fire_left
-
-    cmp al, "d"
-    je fire_right
-
-    cmp al, "q"
-    je fire_upleft
-
-    cmp al, "e"
-    je fire_upright
-
-    cmp al, "z"
-    je fire_downleft
-
-    cmp al, "c"
-    je fire_downright
-
-    jmp end_fire
-
-fire_up:
-    mov fire_row, 14         ; Move fire position upwards
-    mov fire_col, 57         ; Center fire position
-    mov xDir, 0
-    mov yDir, -1
-    jmp fire_loop
-
-fire_down:
-    mov fire_row, 18         ; Move fire position downwards
-    mov fire_col, 57         ; Center fire position
-    mov xDir, 0
-    mov yDir, 1
-    jmp fire_loop
-
-fire_left:
-    mov fire_col, 55         ; Move fire position leftwards
-    mov fire_row, 16         ; Center fire position
-    mov xDir, -1
-    mov yDir, 0
-    jmp fire_loop
-
-fire_right:
-    mov fire_col, 59         ; Move fire position rightwards
-    mov fire_row, 16         ; Center fire position
-    mov xDir, 1
-    mov yDir, 0
-    jmp fire_loop
-
-fire_upleft:
-    mov fire_row, 14         ; Move fire position upwards
-    mov fire_col, 55         ; Move fire position leftwards
-    mov xDir, -1
-    mov yDir, -1
-    jmp fire_loop
-
-fire_upright:
-    mov fire_row, 14         ; Move fire position upwards
-    mov fire_col, 59         ; Move fire position rightwards
-    mov xDir, 1
-    mov yDir, -1
-    jmp fire_loop
-
-fire_downleft:
-    mov fire_row, 18         ; Move fire position downwards
-    mov fire_col, 55         ; Move fire position leftwards
-    mov xDir, -1
-    mov yDir, 1
-    jmp fire_loop
-
-fire_downright:
-    mov fire_row, 18         ; Move fire position downwards
-    mov fire_col, 59         ; Move fire position rightwards
-    mov xDir, 1
-    mov yDir, 1
-    jmp fire_loop
-
-fire_loop:
-    ; Initialise fire position
-    mov dl, fire_col
-    mov dh, fire_row
-    call GoToXY
-
-    ; Loop to move the fireball in the current direction
-    L1:
-
-        ; Ensure fire stays within the bounds of the emitter wall
-        cmp dl, 20            ; Left wall boundary
-        jle end_fire
-
-        cmp dl, 96            ; Right wall boundary
-        jge end_fire
-
-        cmp dh, 5             ; Upper wall boundary
-        jle end_fire
-
-        cmp dh, 27            ; Lower wall boundary
-        jge end_fire
-
-        ; Print the fire symbol at the current position
-        movzx eax, fire_color    ; Set fire color
-        call SetTextColor
-
-        add dl, xDir
-        add dh, yDir
-        call Gotoxy
-
-        mWrite "O"
-
-        ; Continue moving fire in the current direction (recursive)
-        mov eax, 30
-        call Delay
-
-        ; erase the fire before redrawing it
-        call GoToXY
-        mWrite " "
-
-        jmp L1
-
-    end_fire:
-        mov dx, 0
-        call GoToXY
-
-    ret
-fire ENDP
-
-checkForKeyPress PROC
-    ; Check if a key has been pressed and update player position or shape
-    call ReadKey         ; Wait for a key press
-
-    cmp ah, 48h          ; Up arrow key
-    je up_arrow
-    cmp ah, 50h          ; Down arrow key
-    je down_arrow
-    cmp ah, 4Dh          ; Right arrow key
-    je right_arrow
-    cmp ah, 4Bh          ; Left arrow key
-    je left_arrow
-
-    ret                  ; If no key matches, return to main loop
-
-up_arrow:
-    cmp player1.yPos, 10     ; Prevent moving above the emitter wall
-    jle no_move
-    mov al,up_char      ; Set the character to '^'
-    mov player1.sprite,al
-    dec byte ptr player1.yPos ; Move up
-    ; Print the updated player character
-    mov al,player1.sprite
-    call SetTextColor
-    call Gotoxy
-    call WriteChar
-    ret
-
-down_arrow:
-    cmp player1.yPos, 12     ; Prevent moving below the emitter wall
-    jge no_move
-    mov al, down_char    ; Set the character to 'v'
-    mov  player1.sprite, al
-    inc byte ptr player1.yPos; Move down
-    ; Print the updated player character
-    mov al,player1.sprite
-    call SetTextColor
-    call Gotoxy
-    call WriteChar
-    ret
-
-right_arrow:
-    cmp player1.xPos, 79     ; Prevent moving beyond the right wall
-    jge no_move
-    mov al,right_char   ; Set the character to '>'
-    mov player1.sprite,al
-    inc byte ptr player1.xPos; Move right
-    ; Print the updated player character
-    mov al,player1.sprite
-    call SetTextColor
-    call Gotoxy
-    call WriteChar
-    ret
-
-left_arrow:
-    cmp player1.xPos, 1      ; Prevent moving beyond the left wall
-    jle no_move
-    mov al, left_char    ; Set the character to '<'
-    mov player1.sprite, al
-    dec byte ptr player1.xPos ; Move left
-    ; Print the updated player character
-    mov al,player1.sprite
-    call SetTextColor
-    call Gotoxy
-    call WriteChar
-    ret
-
-no_move:
-    ret
-checkForKeyPress ENDP
-
 RUN_ZUMA PROC
     lea eax, menuMusic
     call playMenuMusic
-	call initializeScreen
+	call initializeGame
 	call DrawPlayer
     call DrawBallChain
     lea eax,gameMusic
     call playGameMusic
 	gameLoop:      
-		call checkIfBulletFired
+        call HandleInput
+        call moveBullet
         call updateBallChain
-		jmp GameLoop	
+		jmp GameLoop	        
+
     ExitGame:
     ret
 RUN_ZUMA ENDP
@@ -924,3 +890,7 @@ main PROC
 	exit
 main ENDP
 end main
+
+
+%
+end
