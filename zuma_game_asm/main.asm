@@ -6,7 +6,7 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 
 .data
     menuMusic BYTE "F:\zuma_game_asm\zuma_game_asm\menu.wav", 0   ; Define the file name for the menu sound
-    gameMusic BYTE "F:\zuma_game_asm\zuma_game_asm\music.wav", 0   ; Define the file name for the menu sound
+    gameMusic BYTE "F:\zuma_game_asm\zuma_game_asm\game.wav", 0   ; Define the file name for the menu sound
     SND_FILENAME DWORD 00020000h
     SND_LOOP equ 00000008h
     SND_ASYNC equ 00000001h
@@ -40,13 +40,17 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 	XLIMIT db 100					; Console ranges
 	YLIMIT db 24
 	
-	; Game Objects
+; Game Objects
 	player1 Player <>
     BallChain Ball 100 dup(<'O',?,?,1,?>)
     bullet Ball <'O',?,?,0,?>
 
-	; Extra variables		
-    ballCount = 80
+; Extra variables	
+    colorIndex dd 0
+    colors db red,blue,green,yellow,white,cyan,magenta
+    numColors dd 5
+    lives db 3
+    ballCount dd 40
     gameEnd db 0
     xPos db 56      ; Column (X)
     yPos db 15      ; Row (Y)
@@ -69,34 +73,31 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     lowerBoundary db 24
     rightBoundary db 90
 	
-	 ; Characters representing rotations
+; Characters representing rotations
     up_char db '^'
     down_char db 'v'
     left_char db '<'
     right_char db '>'
+    end_char db '~'
+    end_x db ?
+    end_y db ?
 
     ; Default character (initial direction)
     current_char db '^'
 
 	; Colors for the emitter and player
-    color_red db 4       ; Red
-    color_green db 2     ; Green
-    color_yellow db 14   ; Yellow (for fire symbol)
-    current_color db 4   ; Default player color (red)
-    emitter_color1 db 2  ; Green
-    emitter_color2 db 4  ; Red
-    fire_color db 14     ; Fire symbol color (Yellow)
+    ; fire_color db 14     ; Fire symbol color (Yellow)
 
     ; Emitter properties
-    emitter_symbol db 'O'
-    emitter_row db 3    ; Two rows above player (fixed row for emitter)
-    emitter_col db 25    ; Starting column of the emitter
+    ballchain_y db 4    ; Two rows above player (fixed row for emitter)
+    ballchain_x db 80    ; Starting column of the emitter
 
     ; Fire symbol properties (fired from player)
-    fire_symbol db 'O'
     fire_row db 0        ; Fire will be fired from the player's position
     fire_col db 0        ; Initial fire column will be set in the update logic
-	
+    
+    
+
 	Zuma_art db '                       .+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.',13,10
 			db '                        (    ______   _ __  __    _       ____    _    __  __ _____      )',13,10
 			db '                        )   |__  / | | |  \/  |  / \     / ___|  / \  |  \/  | ____|    (',13,10
@@ -210,7 +211,20 @@ DrawPlayer PROC
 	call setTextColor
 	mov al,player1.sprite
 	call writeChar
+    mov al,player1.xpos
+    mov end_x,al
+    add end_x,5
+    mov al,player1.ypos
+    mov end_y,al
+    sub end_y,4
 
+    mov dl,end_x
+    mov dh,end_y
+    call gotoxy
+    mov al,red
+    call setTextColor
+    mov al,end_char
+    call writeChar
 	ret
 DrawPlayer ENDP
 
@@ -340,12 +354,13 @@ CheckIfBulletFired PROC
     SetDirectionDownRight:
     mov direction, 'c'
     jmp CheckIfSpacePressed
-    
+
+CheckIfSpacePressed:
+; Check if bullet exists before checking input
     mov al,1
     cmp al,bullet.exists
     je ExitFunc
-
-CheckIfSpacePressed:
+    
     cmp dl,' '
     je fireTheBullet
     jmp ExitFunc
@@ -362,11 +377,20 @@ fire PROC
     mov al, direction
     mov bl, player1.xPos
     mov bullet.xPos, bl
-    inc bullet.xPos
     mov bl, player1.yPos
     mov bullet.yPos, bl
-    inc bullet.yPos
 
+    mov ebx,colorIndex
+    movzx edi,colors[ebx]
+    mov bullet.ballColor,edi
+
+    inc colorIndex
+    mov ebx,colorIndex
+    cmp ebx, numColors
+    jle SkipReset
+    mov colorIndex, 0
+
+SkipReset:
     cmp al, "w"
     je fire_up
 
@@ -396,49 +420,62 @@ fire PROC
 fire_up:  
     mov xDir, 0
     mov yDir, -1
+    dec bullet.yPos
     jmp moveTheBullet
 fire_down:   
     mov xDir, 0
     mov yDir, 1
+    inc bullet.yPos
     jmp moveTheBullet
 
 fire_left:   
     mov xDir, -1
     mov yDir, 0
+    dec bullet.xPos
     jmp moveTheBullet
 
 fire_right:
     mov xDir, 1
     mov yDir, 0
+    inc bullet.xPos
     jmp moveTheBullet
 
 fire_upleft:    
     mov xDir, -1
     mov yDir, -1
+    dec bullet.xPos
+    dec bullet.yPos
     jmp moveTheBullet
 
 fire_upright:
     mov xDir, 1
     mov yDir, -1
+    inc bullet.xPos
+    dec bullet.yPos
     jmp moveTheBullet
 
 fire_downleft:
     mov xDir, -1
     mov yDir, 1
+    dec bullet.xPos
+    inc bullet.yPos
     jmp moveTheBullet
 
 fire_downright:
     mov xDir, 1
     mov yDir, 1
+    inc bullet.xPos
+    inc bullet.yPos
     
 moveTheBullet:
+    
     mov bullet.exists,1     ; set bullet exists to true
     ret
 exitFunc:
     ret
 fire ENDP
 
-moveBullet PROC
+moveBullet PROC USES eax
     cmp bullet.exists,0
     je exitFunc     ; dont move bullet if it doesnt exist
     
@@ -448,13 +485,14 @@ moveBullet PROC
     mov al,' '
     call writeChar
     add dl,xDir
-    add dl,xDir
-    add dh,yDir
     add dh,yDir
     mov bullet.xPos,dl
     mov bullet.yPos,dh
 
     call gotoxy
+    mov eax,bullet.ballColor
+    call setTextColor
+    mov eax,0
     mov al,bullet.sprite
     call writeChar
         
@@ -567,18 +605,28 @@ displayButtons ENDP
 initializeGameScreen PROC
 ; Displaying score and title
 LOCAL tmp1:BYTE
-	mov dl,0
-	mov dh,5
+	mov dl,15
+	mov dh,0
+    call Gotoxy
 
 	mov eax,lightgreen (black * 16)
     call SetTextColor
 	mwrite "SCORE: "
-	
-	mov temp1,eax
-	mov eax,0
-	mov al,score
+    mov dl,22
+    call Gotoxy
+    mov temp1,eax
+	movzx eax,score
 	call writeInt
 	mov eax,temp1
+    mov dl,90
+    mov dh,0
+    call Gotoxy
+    mwrite "LIVES: "
+    mov dl,97
+    call Gotoxy
+    movzx eax,lives
+    call writeInt
+    call crlf
 
 	mov eax,white (black * 16)
     call SetTextColor
@@ -588,7 +636,7 @@ LOCAL tmp1:BYTE
     mov edx,OFFSET border
     call WriteString
     mov dl,15
-    mov dh,1
+    mov dh,2
     call Gotoxy
     mov edx,OFFSET border
     call WriteString
@@ -621,65 +669,61 @@ LOCAL tmp1:BYTE
 initializeGameScreen ENDP
 
 initializeGame PROC
+; Display the screen
     call displayButtons
 
+; Wait for user input
 CheckKeyInputs:
     call DetectKeyInput
     cmp bl,2
     jne CheckKeyInputs
 	call Clrscr 
     
+; Go here if start button is pressed
     call inputPlayerName
     call ClrScr
     call initializeGameScreen
 	ret
 initializeGame ENDP
 
-DrawBallChain PROC USES eax ecx edx
-    LOCAL currentColor:dword
-	mov dl, emitter_col
-    mov dh, emitter_row
-    mov ecx,0
+initializeBallChain PROC USES eax ecx esi
+LOCAL currentColor:dword
+mov currentColor,0
+	mov dl, ballchain_x ; initial positions of the ball chain
+    mov dh, ballchain_y
+    mov ecx,ballCount
     mov esi,0
-    mov eax, blue
-    call SetTextColor
-    emitterLoop: 
-        mov currentColor,eax
-        mov al,ballChain[esi].sprite
-        call Gotoxy
-        call WriteChar
-
+    
+    Initialize: 
+        mov edi,currentColor
         mov eax,currentColor
-        cmp eax,blue
-        jne set_blue
-        mov eax,red
-        mov currentColor,eax
-        call SetTextColor
-        jmp next_symbol
-
-    set_blue:
-        mov eax,blue
-        mov currentColor,eax
-        call setTextColor
-
-    next_symbol:
         mov ballChain[esi].xPos,dl
-        mov ballChain[esi].yPos,dh
-        inc dl               
-        add esi,SIZEOF Ball         
-        inc ecx
-        mov ballChain[esi].ballColor,eax 
-        cmp ecx,ballCount
-        jne emitterLoop
-        mov dl, emitter_col
-        ret
-	ret
-DrawBallChain ENDP
+        mov ballChain[esi].yPos,dh   
+        movzx ebx,colors[edi]
+        mov ballChain[esi].ballColor,ebx
+        inc currentColor
+        mov ebx,numColors
+        cmp currentColor,ebx
+        je resetCurrentColorVar
+        inc dl      
+        add esi,SIZEOF Ball       
+        LOOP Initialize
+        
+        jmp ExitFunc
+        resetCurrentColorVar:
+        mov currentColor,0
+        inc dl      
+        add esi,SIZEOF Ball       
+        LOOP Initialize
+        
+ExitFunc:
+    ret
+initializeBallChain ENDP
 
-reDrawBallChain PROC USES eax edx ecx
+DrawBallChain PROC USES eax edx ecx
     mov esi,0
     mov ecx,ballCount
-    ReDrawLoop:
+    DrawLoop:
         mov dl,ballChain[esi].xPos
         mov dh,ballChain[esi].yPos
         mov eax,ballChain[esi].ballColor
@@ -688,9 +732,9 @@ reDrawBallChain PROC USES eax edx ecx
         mov al,ballChain[esi].sprite
         call WriteChar
         add esi,SIZEOF Ball
-        LOOP ReDrawLoop
+        LOOP DrawLoop
     ret
-reDrawBallChain ENDP
+DrawBallChain ENDP
 
 UpdateLoopBallChain PROC USES ecx
     LOCAL tmpX:BYTE
@@ -793,7 +837,7 @@ UpdateBallChain PROC
         dec dl ; make the movement updation
 
         call UpdateLoopBallChain    ; updates the values of each of the balls accordingly
-        call reDrawBallChain        ; redraws the updated version of the chain
+        call DrawBallChain          ; redraws the updated version of the chain
         mov esi,0
         mov dl,ballChain[esi].xPos
         cmp dl,leftBoundary
@@ -811,7 +855,7 @@ UpdateBallChain PROC
         inc dh ; make the movement updation
 
         call UpdateLoopBallChain    ; updates the values of each of the balls accordingly
-        call reDrawBallChain        ; redraws the updated version of the chain
+        call DrawBallChain        ; redraws the updated version of the chain
         mov esi,0
         mov dh,ballChain[esi].yPos
         cmp dh,lowerBoundary
@@ -828,7 +872,7 @@ UpdateBallChain PROC
         inc dl ; make the movement updation
 
         call UpdateLoopBallChain    ; updates the values of each of the balls accordingly
-        call reDrawBallChain        ; redraws the updated version of the chain
+        call DrawBallChain        ; redraws the updated version of the chain
         mov esi,0
         mov dl,ballChain[esi].xPos
         cmp dl,rightBoundary
@@ -845,7 +889,7 @@ UpdateBallChain PROC
         dec dh ; make the movement updation
 
         call UpdateLoopBallChain    ; updates the values of each of the balls accordingly
-        call reDrawBallChain        ; redraws the updated version of the chain
+        call DrawBallChain        ; redraws the updated version of the chain
         mov esi,0
         mov dl,ballChain[esi].xPos
         mov dh,ballChain[esi].yPos
@@ -866,17 +910,108 @@ UpdateBallChain PROC
 	ret
 UpdateBallChain ENDP
 
+EraseBallChain PROC USES ecx esi
+    mov ecx,ballCount
+    mov esi,0
+    Erase:
+        mov dl,ballChain[esi].xPos
+        mov dh,ballChain[esi].yPos
+        call Gotoxy
+        mov al,' '
+        call writeChar
+        add esi,SIZEOF Ball
+        LOOP Erase
+    ret
+EraseBallChain ENDP
+
+AddNewBallToChain PROC USES ecx edi esi
+    mov esi,0                        ; Start at the base address of the ball chain
+    mov ecx,ballCount                ; Load the number of balls
+    dec ecx                           ; Calculate ballCount - 1 (index of the last ball)
+    imul ecx,SIZEOF Ball             ; Multiply index by SIZEOF Ball to get the offset
+    add esi,ecx                      ; Add the offset to the base address
+
+    call EraseBallChain ; Erase the old ball Chain
+    AddNewBall:
+        cmp esi,edi
+        jl InsertNewBall
+
+        mov al,ballChain[esi].xPos
+        mov ballChain[esi + SIZEOF Ball].xPos,al
+
+        mov al,ballChain[esi].yPos
+        mov ballChain[esi + SIZEOF Ball].yPos,al
+
+        mov al,ballChain[esi].sprite
+        mov ballChain[esi + SIZEOF Ball].sprite,al
+
+        mov eax,ballChain[esi].ballColor
+        mov ballChain[esi + SIZEOF Ball].ballColor,eax
+
+        mov al,ballChain[esi].exists
+        mov ballChain[esi + SIZEOF Ball].exists,al
+        dec esi
+        jmp AddNewBall   
+    InsertNewBall:
+    mov al,bullet.xPos   
+    mov ballChain[edi].xPos,al
+    mov al,bullet.yPos
+    mov ballChain[edi].yPos,al
+    mov al,bullet.sprite
+    mov ballChain[edi].sprite,al
+    mov eax,bullet.ballColor
+    mov ballChain[edi].ballColor,eax
+    mov al,1
+    mov ballChain[edi].exists,al
+    mov bullet.exists, 0 ; Mark bullet as non-existent
+
+    ret
+AddNewBallToChain ENDP
+
+DetectCollisions PROC
+    mov ecx,ballCount
+    mov esi,0
+    mov al,bullet.exists
+    cmp al,0
+    je ExitFunc ; dont check collision if bullet doesnt exist
+    
+    CheckCollisionWithBullet:
+        mov dl,bullet.xPos
+        cmp dl,ballChain[esi].xPos
+        jne NoCollision
+        
+        mov dh,bullet.yPos
+        cmp dh,ballChain[esi].yPos
+        jne NoCollision
+
+        mov edi,esi
+        mov dl,0
+        mov dh,0
+        call Gotoxy
+        mwrite "Collision detected"
+        call AddNewBallToChain
+        jmp ExitFunc
+        
+    NoCollision:
+        add esi,SIZEOF Ball
+        LOOP CheckCollisionWithBullet
+ExitFunc:
+    ret
+DetectCollisions ENDP
+
 RUN_ZUMA PROC
     lea eax, menuMusic
     call playMenuMusic
 	call initializeGame
 	call DrawPlayer
+    call InitializeBallChain
     call DrawBallChain
     lea eax,gameMusic
     call playGameMusic
 	gameLoop:      
         call HandleInput
         call moveBullet
+        call detectCollisions
         call updateBallChain
 		jmp GameLoop	        
 

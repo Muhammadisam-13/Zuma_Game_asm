@@ -7,7 +7,7 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 
 .data
     menuMusic BYTE "F:\zuma_game_asm\zuma_game_asm\menu.wav", 0   ; Define the file name for the menu sound
-    gameMusic BYTE "F:\zuma_game_asm\zuma_game_asm\music.wav", 0   ; Define the file name for the menu sound
+    gameMusic BYTE "F:\zuma_game_asm\zuma_game_asm\game.wav", 0   ; Define the file name for the menu sound
     SND_FILENAME DWORD 00020000h
     SND_LOOP equ 00000008h
     SND_ASYNC equ 00000001h
@@ -46,8 +46,11 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     BallChain Ball 100 dup(<'O',?,?,1,?>)
     bullet Ball <'O',?,?,0,?>
 
-	; Extra variables		
-    ballCount = 80
+	; Extra variables	
+    colors db red,blue,green,yellow,white,cyan,magenta
+    numColors db 3
+    lives db 3
+    ballCount dd 40
     gameEnd db 0
     xPos db 56      ; Column (X)
     yPos db 15      ; Row (Y)
@@ -80,21 +83,13 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     current_char db '^'
 
 	; Colors for the emitter and player
-    color_red db 4       ; Red
-    color_green db 2     ; Green
-    color_yellow db 14   ; Yellow (for fire symbol)
-    current_color db 4   ; Default player color (red)
-    emitter_color1 db 2  ; Green
-    emitter_color2 db 4  ; Red
-    fire_color db 14     ; Fire symbol color (Yellow)
+    ; fire_color db 14     ; Fire symbol color (Yellow)
 
     ; Emitter properties
-    emitter_symbol db 'O'
-    emitter_row db 3    ; Two rows above player (fixed row for emitter)
-    emitter_col db 25    ; Starting column of the emitter
+    ballchain_y db 4    ; Two rows above player (fixed row for emitter)
+    ballchain_x db 80    ; Starting column of the emitter
 
     ; Fire symbol properties (fired from player)
-    fire_symbol db 'O'
     fire_row db 0        ; Fire will be fired from the player's position
     fire_col db 0        ; Initial fire column will be set in the update logic
 	
@@ -449,9 +444,9 @@ moveBullet PROC
     mov al,' '
     call writeChar
     add dl,xDir
-    add dl,xDir
+    ;add dl,xDir
     add dh,yDir
-    add dh,yDir
+    ;add dh,yDir
     mov bullet.xPos,dl
     mov bullet.yPos,dh
 
@@ -568,18 +563,28 @@ displayButtons ENDP
 initializeGameScreen PROC
 ; Displaying score and title
 LOCAL tmp1:BYTE
-	mov dl,0
-	mov dh,5
+	mov dl,15
+	mov dh,0
+    call Gotoxy
 
 	mov eax,lightgreen (black * 16)
     call SetTextColor
 	mwrite "SCORE: "
-	
-	mov temp1,eax
-	mov eax,0
-	mov al,score
+    mov dl,22
+    call Gotoxy
+    mov temp1,eax
+	movzx eax,score
 	call writeInt
 	mov eax,temp1
+    mov dl,90
+    mov dh,0
+    call Gotoxy
+    mwrite "LIVES: "
+    mov dl,97
+    call Gotoxy
+    movzx eax,lives
+    call writeInt
+    call crlf
 
 	mov eax,white (black * 16)
     call SetTextColor
@@ -589,7 +594,7 @@ LOCAL tmp1:BYTE
     mov edx,OFFSET border
     call WriteString
     mov dl,15
-    mov dh,1
+    mov dh,2
     call Gotoxy
     mov edx,OFFSET border
     call WriteString
@@ -622,14 +627,17 @@ LOCAL tmp1:BYTE
 initializeGameScreen ENDP
 
 initializeGame PROC
+; Display the screen
     call displayButtons
 
+; Wait for user input
 CheckKeyInputs:
     call DetectKeyInput
     cmp bl,2
     jne CheckKeyInputs
 	call Clrscr 
     
+; Go here if start button is pressed
     call inputPlayerName
     call ClrScr
     call initializeGameScreen
@@ -638,8 +646,8 @@ initializeGame ENDP
 
 DrawBallChain PROC USES eax ecx edx
     LOCAL currentColor:dword
-	mov dl, emitter_col
-    mov dh, emitter_row
+	mov dl, ballchain_x
+    mov dh, ballchain_y
     mov ecx,0
     mov esi,0
     mov eax, blue
@@ -672,7 +680,7 @@ DrawBallChain PROC USES eax ecx edx
         mov ballChain[esi].ballColor,eax 
         cmp ecx,ballCount
         jne emitterLoop
-        mov dl, emitter_col
+        mov dl, ballchain_x
         ret
 	ret
 DrawBallChain ENDP
@@ -867,6 +875,97 @@ UpdateBallChain PROC
 	ret
 UpdateBallChain ENDP
 
+EraseBallChain PROC USES ecx esi
+    mov ecx,ballCount
+    mov esi,0
+    Erase:
+        mov dl,ballChain[esi].xPos
+        mov dh,ballChain[esi].yPos
+        call Gotoxy
+        mov al,' '
+        call writeChar
+        inc esi
+        LOOP Erase
+    ret
+EraseBallChain ENDP
+
+AddNewBallToChain PROC USES ecx edi esi
+    mov ecx,ballCount
+    mov esi,ballCount
+    dec ecx
+    dec esi
+    inc ballCount
+
+    call eraseBallChain ; Erase the old ball Chain
+    AddNewBall:
+        cmp esi,edi
+        jl InsertNewBall
+
+        mov al,ballChain[esi].xPos
+        mov ballChain[esi + SIZEOF Ball].xPos,al
+
+        mov al,ballChain[esi].yPos
+        mov ballChain[esi + SIZEOF Ball].yPos,al
+
+        mov al,ballChain[esi].sprite
+        mov ballChain[esi + SIZEOF Ball].sprite,al
+
+        mov eax,ballChain[esi].ballColor
+        mov ballChain[esi + SIZEOF Ball].ballColor,eax
+
+        mov al,ballChain[esi].exists
+        mov ballChain[esi + SIZEOF Ball].exists,al
+        dec esi
+        jmp AddNewBall   
+    InsertNewBall:
+    mov al,bullet.xPos   
+    mov ballChain[edi].xPos,al
+    mov al,bullet.yPos
+    mov ballChain[edi].yPos,al
+    mov al,bullet.sprite
+    mov ballChain[edi].sprite,al
+    mov eax,bullet.ballColor
+    mov ballChain[edi].ballColor,eax
+    mov al,1
+    mov ballChain[edi].exists,al
+    mov bullet.exists, 0 ; Mark bullet as non-existent
+
+    call redrawBallChain
+    ret
+AddNewBallToChain ENDP
+
+DetectCollisions PROC
+    mov ecx,ballCount
+    mov esi,0
+    mov al,bullet.exists
+    cmp al,0
+    je ExitFunc ; dont check collision if bullet doesnt exist
+    
+    CheckCollisionWithBullet:
+        mov dl,bullet.xPos
+        cmp dl,ballChain[esi].xPos
+        jne NoCollision
+        
+        mov dh,bullet.yPos
+        cmp dh,ballChain[esi].yPos
+        jne NoCollision
+
+        mov edi,esi
+        mov dl,0
+        mov dh,0
+        call Gotoxy
+        mwrite "Collision detected"
+        call AddNewBallToChain
+        jmp ExitFunc
+        
+    NoCollision:
+        inc esi
+        cmp esi,ballCount
+        jl CheckCollisionWithBullet
+ExitFunc:
+    ret
+DetectCollisions ENDP
+
 RUN_ZUMA PROC
     lea eax, menuMusic
     call playMenuMusic
@@ -878,6 +977,7 @@ RUN_ZUMA PROC
 	gameLoop:      
         call HandleInput
         call moveBullet
+        call detectCollisions
         call updateBallChain
 		jmp GameLoop	        
 
@@ -890,7 +990,5 @@ main PROC
 	exit
 main ENDP
 end main
-
-
 %
 end
