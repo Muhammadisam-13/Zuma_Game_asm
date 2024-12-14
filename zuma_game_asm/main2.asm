@@ -3,11 +3,15 @@ INCLUDE irvine32.inc
 INCLUDE macros.inc
 INCLUDELIB winmm.lib
 
+mciSendString PROTO :PTR BYTE, :PTR BYTE, :DWORD, :DWORD
 PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 
 .data
     menuMusic BYTE "F:\zuma_game_asm\zuma_game_asm\menu.wav", 0   ; Define the file name for the menu sound
     gameMusic BYTE "F:\zuma_game_asm\zuma_game_asm\game.wav", 0   ; Define the file name for the menu sound
+    level1music BYTE "F:\zuma_game_asm\zuma_game_asm\level1.wav", 0   ; Define the file name for the menu sound
+    level2music BYTE "F:\zuma_game_asm\zuma_game_asm\level2.wav", 0   ; Define the file name for the menu sound
+    level3music BYTE "F:\zuma_game_asm\zuma_game_asm\level3.wav", 0   ; Define the file name for the menu sound
     combinationSound BYTE "F:\zuma_game_asm\zuma_game_asm\combinationsound.wav", 0   ; Define the file name for the menu sound
     SND_FILENAME DWORD 00020000h
     SND_LOOP equ 00000008h
@@ -27,7 +31,6 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 		xPos db ?
 		yPos db ?
 	Player ends
-    playerName db 20 dup(?)
 				
 ; Rotation keys
 	move_up db 'W'									
@@ -48,13 +51,22 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     bullet Ball <'O',?,?,0,?>
 
 ; Extra variables	
+    playerName db 20 dup(?),0
+    nameLength dd 0
+    filehandle dword ?
+    append_str db 2 dup(?),0
+	fileInput db 255 dup(?), 0
+    filename db "Scores.txt",0
+    ballCount dd 1
+    LevelComplete db 0
+    LevelNotCleared db 0
+    currentLevel dd 1
     revolutions db 0
     MAX_REVOLUTIONS db 6
     colorIndex dd 0
     colors db red,blue,green,yellow,white,cyan,magenta
-    numColors dd 5
+    numColors dd 3
     lives db 3
-    ballCount dd 40
     gameEnd db 0
     xPos db 56      ; Column (X)
     yPos db 15      ; Row (Y)
@@ -72,10 +84,15 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 	border1 BYTE "|",0ah,0
 	border2 BYTE "|",0  
 
-    upperBoundary db 3
-    leftBoundary db 30
-    lowerBoundary db 24
-    rightBoundary db 90
+    upperBoundary db 6
+    leftBoundary db 40
+    lowerBoundary db 20
+    rightBoundary db 80
+
+    bulletupperBoundary db 1
+    bulletleftBoundary db 38
+    bulletlowerBoundary db 22
+    bulletrightBoundary db 82
 	
 ; Characters representing rotations
     up_char db '^'
@@ -102,16 +119,11 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     
     
 
-	Zuma_art db '                       .+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.',13,10
-			db '                        (    ______   _ __  __    _       ____    _    __  __ _____      )',13,10
-			db '                        )   |__  / | | |  \/  |  / \     / ___|  / \  |  \/  | ____|    (',13,10
-			db '                        (     / /| | | | |\/| | / _ \   | |  _  / _ \ | |\/| |  _|       )',13,10
-			db '                        )    / /_| |_| | |  | |/ ___ \  | |_| |/ ___ \| |  | | |___     (',13,10
-			db '                        (   /____|\___/|_|  |_/_/   \_\  \____/_/   \_\_|  |_|_____|     )',13,10
-			db '                        )                                                               (',13,10 
-			db '                        (                                                                 )',13,10
-			db '                        "+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"+.+"',13,10 
-			db 0
+	Zuma_art db "                                           ______   _ __  __    _           ", 0Ah
+         db "                                   __/\__ |__  / | | |  \/  |  / \    __/\__", 0Ah
+         db "                                   \    /   / /| | | | |\/| | / _ \   \    /", 0Ah
+         db "                                   /_  _\  / /_| |_| | |  | |/ ___ \  /_  _\", 0Ah
+         db "                                     \/   /____|\___/|_|  |_/_/   \_\   \/  ", 0Ah, 0
 
  Zuma_art1 db '                         ________  ___  ___  _____ ______   ________      ',13,10
           db '                          |\_____  \|\  \|\  \|\   _ \  _   \|\   __  \     ',13,10
@@ -171,6 +183,12 @@ INSTRUCTIONS    DB '                                    ._ _ _ ___ ___ ___ _ _ _
              db "                                       |  __/ ___ \ |_| |___) | |___| |_| |", 0Dh, 0Ah
              db "                                       |_| /_/   \_\___/|____/|_____|____/ ", 0Dh, 0Ah, 0
 
+    GAME_OVER_SCREEN db '                           ____    _    __  __ _____    _____     _______ ____  ', 0DH,0AH
+    db '                         / ___|  / \  |  \/  | ____|  / _ \ \   / / ____|  _ \ ', 0DH,0AH
+    db '                        | |  _  / _ \ | |\/| |  _|   | | | \ \ / /|  _| | |_) |', 0DH,0AH
+    db '                        | |_| |/ ___ \| |  | | |___  | |_| |\ V / | |___|  _ < ', 0DH,0AH
+    db '                         \____/_/   \_\_|  |_|_____|  \___/  \_/  |_____|_| \_\\', 0DH,0AH,0
+
 
 
 ; --------------------------------------------------------------------------------------------------------------		
@@ -192,7 +210,7 @@ playMusic ENDP
 
 DrawPlayer PROC
 	mov player1.ypos,13
-	mov player1.xpos,55
+	mov player1.xpos,60
     mov bl,current_char
     mov player1.sprite,'@'
 	mov dh,player1.ypos
@@ -216,7 +234,7 @@ DrawPlayer PROC
     mov al,red
     call setTextColor
     mov al,end_char
-    call writeChar
+    ;call writeChar
 	ret
 DrawPlayer ENDP
 
@@ -243,10 +261,16 @@ instructionsMenu PROC USES eax edx
 instructionsMenu ENDP
 
 inputPlayerName PROC
+    mov eax,green
+    call settextcolor
+    lea edx,ZUMA_ART
+    call writeString
+    call crlf
     mwrite "ENTER YOUR NAME: "
     mov edx,OFFSET playerName
     mov ecx,20
     call readString
+    mov nameLength,eax
 
     ret
 inputPlayerName ENDP
@@ -271,10 +295,25 @@ EnablePauseScreen PROC
     jmp DetectKeyPress
 
     ExitingPauseScreen:
-    lea eax,gameMusic
+    cmp currentLevel,1
+    je level1
+    cmp currentLevel,2
+    je level2
+    jmp level3
+level1:
+    lea eax,level1music
     call playMusic
+    jmp init
+level2:
+    lea eax,level2music
+    call playMusic
+    jmp init
+level3:
+    lea eax,level3music
+    call playMusic
+init:
     call ClrScr
-    call initializeGameScreen
+    call updateScoreAndLives
     call drawPlayer
     ret
 EnablePauseScreen ENDP
@@ -286,8 +325,16 @@ HandleInput PROC
     call ReadKey
     cmp dl,'P'
     je PauseInputDetected
+    cmp dl,'O'
+    je SkipLevel
 
     call CheckIfBulletFired     ; Check if bullet fired
+    jmp ExitFunc
+
+SkipLevel:
+    mov levelComplete,1
+    lea eax,combinationsound
+    call playMusic
     jmp ExitFunc
 
 PauseInputDetected:
@@ -512,13 +559,13 @@ moveBullet PROC USES eax
     mov al,bullet.sprite
     call writeChar
         
-    cmp dl, 30                ; Left boundary
+    cmp dl, bulletleftBoundary                ; Left boundary
     jle EndBullet
-    cmp dl, 85                ; Right boundary
+    cmp dl, bulletrightBoundary                ; Right boundary
     jge EndBullet
-    cmp dh, 2                ; Top boundary
+    cmp dh, bulletupperBoundary                ; Top boundary
     jle EndBullet
-    cmp dh, 24                ; Bottom boundary
+    cmp dh, bulletlowerBoundary                ; Bottom boundary
     jge EndBullet
 
     ret
@@ -618,80 +665,6 @@ displayButtons PROC
     ret
 displayButtons ENDP
 
-initializeGameScreen PROC
-; Displaying score and title
-LOCAL tmp1:BYTE
-	mov dl,15
-	mov dh,0
-    call Gotoxy
-
-	mov eax,lightgreen (black * 16)
-    call SetTextColor
-; Score
-	mwrite "SCORE: "
-    mov dl,22
-    call Gotoxy
-    mov temp1,eax
-	movzx eax,score
-	call writeInt
-; Ball Count
-    mov dl,45
-    call Gotoxy
-    mwrite "Ball Count:"
-    mov eax,ballCount
-    call WriteInt
-	mov eax,temp1
-; Lives 
-    mov dl,90
-    mov dh,0
-    call Gotoxy
-    mwrite "LIVES: "
-    mov dl,97
-    call Gotoxy
-    movzx eax,lives
-    call writeInt
-    call crlf
-
-	mov eax,white (black * 16)
-    call SetTextColor
-    mov dl,15
-    mov dh,29
-    call Gotoxy
-    mov edx,OFFSET border
-    call WriteString
-    mov dl,15
-    mov dh,2
-    call Gotoxy
-    mov edx,OFFSET border
-    call WriteString
-
-    mov ecx,27
-    mov dh,2
-    mov tmp1,dh
-    initializeBorder1:
-        mov dh,tmp1
-		mov dl,15
-		call Gotoxy
-		mov edx,OFFSET border1
-		call WriteString
-        inc tmp1
-		LOOP initializeBorder1
-
-    mov ecx,27
-    mov dh,2
-    mov temp,dh
-
-    initializeBorder2:
-		mov dh,temp
-		mov dl,99
-		call Gotoxy
-		mov edx,OFFSET border2
-		call WriteString
-		inc temp
-		LOOP initializeBorder2
-   ret
-initializeGameScreen ENDP
-
 UpdateScoreAndLives PROC
     mov dl,15
 	mov dh,0
@@ -699,15 +672,21 @@ UpdateScoreAndLives PROC
 
 	mov eax,lightgreen (black * 16)
     call SetTextColor
-; Score
-	mwrite "SCORE: "
-    mov dl,22
+; Level
+    mov dl,10
     call Gotoxy
+    mwrite "Level: "
+    mov eax,currentLevel
+    call writeInt
+; Score
+    mov dl,30
+    call Gotoxy
+	mwrite "Score: "
     mov temp1,eax
 	movzx eax,score
 	call writeInt
 ; Ball Count
-    mov dl,45
+    mov dl,49
     call Gotoxy
     mwrite "Ball Count:"
     mov eax,ballCount
@@ -717,7 +696,7 @@ UpdateScoreAndLives PROC
     mov dl,90
     mov dh,0
     call Gotoxy
-    mwrite "LIVES: "
+    mwrite "Lives: "
     mov dl,97
     call Gotoxy
     movzx eax,lives
@@ -740,7 +719,7 @@ CheckKeyInputs:
 ; Go here if start button is pressed
     call inputPlayerName
     call ClrScr
-    call initializeGameScreen
+    ;call initializeGameScreen
 	ret
 initializeGame ENDP
 
@@ -797,7 +776,7 @@ DrawBallChain ENDP
 RestartLevel PROC
     call stopMusic
     call ClrScr
-    call initializeGameScreen
+    call updateScoreAndLives
     call DrawPlayer
     call initializeBallChain
     call DrawBallChain
@@ -816,6 +795,8 @@ UpdateLoopBallChain PROC USES ecx
 ; Initial conditions
     mov esi,0
     mov ecx,ballCount
+    cmp ecx,1
+    je ifOneBall
 
 ; Storing original value of the first ball in temp
     mov al,ballChain[esi].xPos
@@ -843,6 +824,7 @@ UpdateLoopBallChain PROC USES ecx
 ; Move to the next ball before the loop starts
     add esi,SIZEOF Ball
     dec ecx
+    cmp ecx,0
 
     UpdateL1:
         mov dl,ballChain[esi].xPos
@@ -863,6 +845,8 @@ UpdateLoopBallChain PROC USES ecx
 
         add esi,SIZEOF Ball
         Loop UpdateL1
+ifOneBall:
+
     ret
 UpdateLoopBallChain ENDP
 
@@ -988,12 +972,12 @@ maxRevsReached:
     dec lives
     cmp lives,0
     je EndLevel
-    call restartLevel
+    ;call restartLevel
     ret
 NextLevel:
     ; inc level
 EndLevel:
-    call ClrScr
+    ;call ClrScr
     ret
 UpdateBallChain ENDP
 
@@ -1059,11 +1043,11 @@ ShiftBalls PROC USES esi edi eax ebx ecx
     mov dh,2
     mov dl,0
     call Gotoxy
-    mwrite "Combination of "
     mov eax,ebx
     call WriteInt
     mov ecx,ballCount
     sub ecx,ebx
+    jecxz ExitFunc
     ShiftLoop:
         mov edi,esi
         imul eax,ebx,SIZEOF Ball
@@ -1078,8 +1062,9 @@ ShiftBalls PROC USES esi edi eax ebx ecx
         mov ballChain[edi].ballColor,eax       
         add esi,SIZEOF Ball
         Loop ShiftLoop
-    ret
 
+ExitFunc:
+    ret
 ShiftBalls ENDP
 
 checkBallCombinations PROC USES edi ecx
@@ -1118,6 +1103,8 @@ checkBallCombinations PROC USES edi ecx
         call ShiftBalls
         add score,bl
         sub ballCount,ebx
+        cmp ballCount,0
+        je NoBallsLeft
         imul eax,ebx,SIZEOF Ball
         sub esi,eax
         mov edi,esi
@@ -1135,11 +1122,19 @@ checkBallCombinations PROC USES edi ecx
         call ShiftBalls
         add score,bl
         sub ballCount,ebx
+        cmp ballCount,0
+        je NoBallsLeft
         imul eax,ebx,SIZEOF Ball
         sub esi,eax
         mov edi,esi
 ExitFunc:
+    mov bl,1
+    cmp ballCount,0
+    je NoBallsLeft
     call DrawBallChain
+    ret
+NoBallsLeft:
+    mov bl,0
     ret
 checkBallCombinations ENDP
 
@@ -1148,7 +1143,7 @@ DetectCollisions PROC
     mov esi,0
     mov al,bullet.exists
     cmp al,0
-    je ExitFunc ; dont check collision if bullet doesnt exist
+    je NextCheckCollisionWithPlayer ; dont check collision if bullet doesnt exist
     
     CheckCollisionWithBullet:
         mov dl,bullet.xPos
@@ -1160,44 +1155,180 @@ DetectCollisions PROC
         jne NoCollision
 
         mov edi,esi
-        mov dl,0
-        mov dh,0
-        call Gotoxy
-        mwrite "Collision"
         call AddNewBallToChain      ; Add the new ball to the chain
-        jmp ExitFunc
-        
+        jmp NextCheckCollisionWithPlayer
     NoCollision:
         add esi,SIZEOF Ball
         LOOP CheckCollisionWithBullet
+
+    NextCheckCollisionWithPlayer:    
+        mov ecx,ballCount
+        mov esi,0   
+    CheckCollisionWithPlayer:
+        mov dl,player1.xPos
+        cmp dl,ballChain[esi].xPos
+        jne NoCollision2
+        
+        mov dh,player1.yPos
+        cmp dh,ballChain[esi].yPos
+        jne NoCollision2
+        
+        mov levelNotCleared,1
+        jmp ExitFunc
+    NoCollision2:
+        add esi,SIZEOF Ball
+        LOOP CheckCollisionWithPlayer           
 ExitFunc:
     ret
 DetectCollisions ENDP
 
-RUN_ZUMA PROC
+checkLevelComplete PROC
+    mov eax,ballCount
+    cmp eax,1
+    jle LevelFinished
+
+    ret
+LevelFinished:
+    mov levelComplete,1
+    ret
+checkLevelComplete ENDP
+
+run PROC
     lea eax, menuMusic
     call playMusic
 	call initializeGame
+gameStart:
+    mov eax,currentLevel
+    mov ecx,eax
+    cmp ecx,1
+    je LevelOne
+    cmp ecx,2
+    je LevelTwo
+    cmp ecx,3
+    je LevelThree
+    jmp ExitGame
+LevelOne:
+    mov upperBoundary,6
+    mov leftBoundary,40
+    mov lowerBoundary,20
+    mov rightBoundary,80
+    mov numColors,3
+    mov ballCount,2
+    lea eax,level1music
+    call playMusic
+    jmp InitializeLevel
+
+LevelTwo:
+    mov upperBoundary,6
+    mov leftBoundary,40
+    mov lowerBoundary,20
+    mov rightBoundary,80
+    mov numColors,5
+    mov ballCount,10
+    lea eax,level2music
+    call playMusic
+    jmp InitializeLevel
+
+LevelThree:
+    mov upperBoundary,6
+    mov leftBoundary,30
+    mov lowerBoundary,21
+    mov rightBoundary,90
+    mov bulletupperBoundary, 4
+    mov bulletleftBoundary,28
+    mov bulletlowerBoundary,23
+    mov bulletrightBoundary,92
+    mov numColors,8
+    mov ballCount,30
+    lea eax,level3music
+    call playMusic
+    jmp InitializeLevel
+
+InitializeLevel:
+    call ClrScr
 	call DrawPlayer
+    call updateScoreAndLives
     call InitializeBallChain
     call DrawBallChain
-    lea eax,gameMusic
-    call playMusic
-	gameLoop:      
-        call HandleInput            ; Handle all inputs
-        call moveBullet             ; Move bullet if exists
-        call detectCollisions       ; Detect collisions between ball and chain
-        call updateBallChain        ; Update position of chain
-        call checkBallCombinations  ; Check if combinations of three or more are created
-        call updateScoreAndLives    ; Update the score accordingly
-		jmp GameLoop	        
 
-    ExitGame:
+gameLoop:     
+    mov bl,1
+    call HandleInput            ; Handle all inputs
+    call moveBullet             ; Move bullet if exists
+    call detectCollisions       ; Detect collisions between ball and chain
+    call updateBallChain        ; Update position of chain
+    call checkBallCombinations  ; Check if combinations of three or more are created
+    call checkLevelComplete
+    cmp LevelComplete,1
+    je NextLevel
+    cmp levelNotCleared,1
+    je ReduceLife
+
+    call updateScoreAndLives    ; Update the score accordingly
+	jmp GameLoop
+ReduceLife:
+    dec lives
+    cmp lives,0
+    je ExitGame
+    mov levelNotCleared,0
+    call ClrScr
+    jmp gameStart
+NextLevel:
+    lea eax,combinationsound
+    call playMusic
+    mov eax,500
+    call delay
+    inc currentLevel
+    mov levelComplete,0
+    jmp gameStart
+
+ExitGame:
+    call stopMusic
+    call ClrScr
+    mov dh,11
+    mov dl,0
+    
+    call gotoxy
+    mov eax,red
+    call setTextColor
+    lea edx,GAME_OVER_SCREEN
+    call writeString
+    call crlf
+    call waitMsg
+
+    mov edx,OFFSET filename
+	call createoutputfile
+	mov filehandle,eax
+	jc fileCreateError
+	jmp exit1
+
+	fileCreateError:
+	mwrite "File not created"
+	exit
+
+	exit1:
+	mov eax,filehandle
+	mov edx,OFFSET playername
+	mov ecx,nameLength
+	call writetofile
+	jc show_write_error
+   
+
+	jmp exit2
+
+	show_write_error:
+	call crlf
+	mwrite "File not written"
+	exit
+
+	exit2:
+	mov eax,filehandle
+	call closefile
     ret
-RUN_ZUMA ENDP
+run ENDP
 
 main PROC
-	call RUN_ZUMA
+	call run
 	exit
 main ENDP
 end main
