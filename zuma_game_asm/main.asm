@@ -53,9 +53,9 @@ PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
     playerName db 20 dup(?),0
     nameLength dd 0
     filehandle dword ?
-    append_str db 2 dup(?),0
 	fileInput db 255 dup(?), 0
     filename db "Scores.txt",0
+    append_str db 2 dup(?),0
     ballCount dd 1
     LevelComplete db 0
     LevelNotCleared db 0
