@@ -18,7 +18,7 @@ A simple console-based version of the game 'Zuma', made in x86 MASM Assembly and
 
 This was a solo project so I am the sole contributor of it.
 ## Configuration for MASM Visual Studios project and Irvine32
-- Extract the zip file to your C drive
+- Extract the zip file named 'Irvine.zip' contained in the 'zuma_game_asm' folder, to your C drive
 - Create C++ empty project.
 - Right-click project file name - Build dependencies - build customization- Check masm
 - Right-click project file name- properties
