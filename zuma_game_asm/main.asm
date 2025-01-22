@@ -322,12 +322,12 @@ HandleInput PROC
     mov eax,50
     call Delay
     call ReadKey
-    cmp dl,'P'
-    je PauseInputDetected
+    ;cmp dl,'P'
+    ;je PauseInputDetected
     cmp dl,'O'
     je SkipLevel
 
-    call CheckIfBulletFired     ; Check if bullet fired
+    call CheckIfBulletFired     ;  if bullet Checkfired
     jmp ExitFunc
 
 SkipLevel:
@@ -599,8 +599,8 @@ ContinueDetecting:
     call ReadKey
     cmp dl,'S'
     je SCondition
-    cmp dl,'I'
-    je ICondition
+    ;cmp dl,'I'
+    ;je ICondition
     cmp dl,'E'
     je ECondition
     jmp ContinueDetecting
