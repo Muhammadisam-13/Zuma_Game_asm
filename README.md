@@ -1,7 +1,7 @@
 
 # Zuma Game
 
-A simple console-based version of the game 'Zuma', made in x86 MASM Assembly and the Irvine Library
+A very simple console-based version of the game 'Zuma', made in x86 MASM Assembly and the Irvine Library
 
 
 ## Features
